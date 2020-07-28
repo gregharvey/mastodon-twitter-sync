@@ -1,50 +1,47 @@
 use crate::errors::*;
-use mammut::apps::{AppBuilder, Scopes};
-use mammut::{Mastodon, Registration};
+use elefren::helpers::cli;
+use elefren::scopes::Scopes;
+use elefren::{Mastodon, Registration};
 use std::io;
 
 use super::*;
 
 pub fn mastodon_register() -> Result<Mastodon> {
-    let app = AppBuilder {
-        client_name: "mastodon-twitter-sync",
-        redirect_uris: "urn:ietf:wg:oauth:2.0:oob",
-        scopes: Scopes::ReadWrite,
-        website: Some("https://github.com/klausi/mastodon-twitter-sync"),
-    };
-
     let instance = console_input(
         "Provide the URL of your Mastodon instance, for example https://mastodon.social ",
     )?;
-    let mut registration = Registration::new(instance);
-    registration.register(app)?;
-    let url = registration.authorise()?;
-    println!("Click this link to authorize on Mastodon: {}", url);
+    let registration = wrap_elefren_error(
+        Registration::new(instance)
+            .client_name("mastodon-twitter-sync")
+            .website("https://github.com/klausi/mastodon-twitter-sync")
+            .redirect_uris("urn:ietf:wg:oauth:2.0:oob")
+            .scopes(Scopes::read_all() | Scopes::write_all())
+            .build(),
+    )?;
 
-    let code = console_input("Paste the returned authorization code")?;
-    let access_token = registration.create_access_token(code)?;
-    Ok(access_token)
+    wrap_elefren_error(cli::authenticate(registration))
 }
 
 pub async fn twitter_register() -> Result<TwitterConfig> {
     println!("Go to https://developer.twitter.com/en/apps/create to create a new Twitter app.");
-    println!("Name: Mastodon Twitter Sync");
+    println!("Name: Mastodon Twitter Sync (plus something unique, like your name)");
     println!("Description: Synchronizes Tweets and Toots");
     println!("Website: https://github.com/klausi/mastodon-twitter-sync");
+    println!("App Usage: This app synchronizes Tweets and Toots between Twitter and my Mastodon instance, for the purpose of keeping the two in sync.");
 
     let consumer_key = console_input("Paste your consumer key")?;
     let consumer_secret = console_input("Paste your consumer secret")?;
 
     let con_token = egg_mode::KeyPair::new(consumer_key.clone(), consumer_secret.clone());
-    let request_token = egg_mode::request_token(&con_token, "oob").await?;
+    let request_token = egg_mode::auth::request_token(&con_token, "oob").await?;
     println!(
         "Click this link to authorize on Twitter: {}",
-        egg_mode::authorize_url(&request_token)
+        egg_mode::auth::authorize_url(&request_token)
     );
     let pin = console_input("Paste your PIN")?;
 
     let (token, user_id, screen_name) =
-        egg_mode::access_token(con_token, &request_token, pin).await?;
+        egg_mode::auth::access_token(con_token, &request_token, pin).await?;
 
     match token {
         egg_mode::Token::Access {
@@ -60,7 +57,7 @@ pub async fn twitter_register() -> Result<TwitterConfig> {
             delete_older_statuses: false,
             delete_older_favs: false,
             sync_retweets: true,
-            sync_hashtag: std::option::Option::Some("".to_string()),
+            sync_hashtag: None,
         }),
         _ => unreachable!(),
     }

@@ -48,7 +48,7 @@ async fn run() -> Result<()> {
                     delete_older_statuses: false,
                     delete_older_favs: false,
                     sync_reblogs: true,
-                    sync_hashtag: std::option::Option::Some("".to_string()),
+                    sync_hashtag: None,
                 },
                 twitter: twitter_config,
             };
@@ -62,7 +62,7 @@ async fn run() -> Result<()> {
         }
     };
 
-    let mastodon = Mastodon::from_data(config.mastodon.app);
+    let mastodon = Mastodon::from(config.mastodon.app);
 
     let account = match mastodon.verify_credentials() {
         Ok(account) => account,
